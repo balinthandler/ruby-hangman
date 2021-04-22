@@ -1,5 +1,5 @@
 require 'json'
-require 'pry'
+require 'colorize'
 
 def random_word(path)
   words = File.read(path).split
@@ -154,27 +154,41 @@ class Game
     @turns = 10
     @found = []
     @missed = []
+    @lastguess = ""
     @gameover = false
     
   end
 
   def start_game
-    puts "Hangman game initialized\n\n"
-    puts "Try to guess the secret word below!"
+    puts
+    puts "  ---------------------------------------------- "
+    puts " |              WELCOME TO HANGMAN              |"
+    puts " |                                              |"
+    puts " | The computer selects an english word from a  |"
+    puts " | file that contains approx. 65k unique words. |"
+    puts " | It will be between 5 and 12 characters long  |"
+    puts " | and you have to figure out letter by letter. |"
+    puts " |                                              |"
+    puts " | You can make 10 mistake, before you lose.    |"
+    puts " | Save your game or load your earlier one in   |"
+    puts " | the Game Menu. To enter the Game Menu, type  |"
+    puts " | " +"menu ".red + "at any point of the game.               |"
+    puts "  ---------------------------------------------- "
+    puts
+    puts "Random word have been chosen. " 
+    puts "Try to guess any letter of the word below!"
     display_secret(@secret, @solved_indexes)
-    puts "You have 10 guess to miss."
-    puts "To enter the Game Menu, type menu"
   end
 
   def menu
-    puts "---------  GAME MENU  ---------"
+    puts "---------  GAME MENU  ---------".red
     puts "Available commands:"
-    puts "  new   - start new game"
-    puts "  save   - save current game"
-    puts "  load   - load saved game"
-    puts "  delete - delete saved game"
-    puts "  exit   - exit menu"
-    puts "-------------------------------"
+    puts "  new".green + "    - start new game"
+    puts "  save".green + "   - save current game"
+    puts "  load".green + "   - load saved game"
+    puts "  delete".green + " - delete saved game"
+    puts "  exit".green + "   - exit menu"
+    puts "-------------------------------".red
     command = ''
     until /^new$|^save$|^load$|^delete$|^exit$/.match(command)
       puts "Type your command:"
@@ -184,9 +198,11 @@ class Game
       puts
       puts "Starting New Game..."
       command_new()
+      return 'new'
     end
     if command == 'save'
       command_save()
+      return 'save'
     end
     if command == 'load'
       command_load()
@@ -194,6 +210,11 @@ class Game
     end
     if command == 'delete'
       command_delete()
+      return 'delete'
+    end
+
+    if command == 'exit'
+      return 'exit'
     end
 
   end
@@ -205,6 +226,7 @@ class Game
     @turns = 10
     @found = []
     @missed = []
+    @lastguess = ""
     @gameover = false
     start_game()
   end
@@ -212,45 +234,55 @@ class Game
   def command_save
     savegame()
     puts
-    puts "Game Saved"
+    puts "Game Saved".green
     puts
     
   end
 
   def command_load
     loadgame()
-    puts
-    puts "Game Loaded"
-    puts
+
     
   end
 
   def command_delete
     deletegame
     puts
-    puts "Saved game deleted"
+    puts "Saved game deleted".red
     puts
     
   end
 
   def game_logic
-    puts
     start_game()
 
     until @gameover
-      guess = get_input()
-      if guess == 'menu'
+      input = get_input()
+      if input == 'menu'
         menu = menu()
-        unless menu == 'load'
-          next
+        if menu == 'load' || menu == 'save' || menu == 'delete' || 'exit'
+          show_hangman(@turns)
+          display_secret(@secret, @solved_indexes)
+          display_guess(@lastguess)
+          puts
+    
+          display_found(@found)
+          display_missed(@missed)
+          display_turns(@turns)
+          puts
         end
+        next
+      else
+        @lastguess = input
       end
-      puts
-      evaluate(@secret, guess)
+
+      evaluate(@secret, @lastguess)
+      
       show_hangman(@turns)
       display_secret(@secret, @solved_indexes)
-      display_guess(guess)
+      display_guess(@lastguess)
       puts
+
       display_found(@found)
       display_missed(@missed)
       display_turns(@turns)
@@ -259,14 +291,27 @@ class Game
       if @turns == 0
         @gameover = true
         lose_message()
+        puts "Want to play another round? y/n"
+        ask_newgame()
       elsif @secret.length == @solved_indexes.length
         @gameover = true
         win_message()
+        puts "Want to play another round? y/n"
+        ask_newgame()
       end
     end
 
   end
 
+  def ask_newgame
+    answer = ''
+    until answer == 'y' || answer == 'n'
+      answer = gets.chomp.downcase
+      if answer == 'y'
+        command_new()
+      end
+    end
+  end
 
   def display_turns(turns)
     puts "Turns left: #{turns}"
@@ -290,24 +335,29 @@ class Game
 
   def display_missed(missed) 
     print "Letters missed:"
-    missed.each_with_index { |e, index|
-      unless index == missed.length - 1
-        print " #{e},"
-      else
-        print " #{e}."
-      end
-    }
+    if missed.length == 0
+      puts
+      return    
+    else
+      missed.each_with_index { |e, index|
+        unless index == missed.length - 1
+          print " #{e},"
+        else
+          print " #{e}."
+        end
+      }
+    end
     puts
   end
 
   def win_message
-    puts "CONGRATS!"
-    puts "You won!"
+    puts "CONGRATS!".green
+    puts "You won!".green
   end
 
   def lose_message
-    puts "GAME OVER"
-    puts "Out of guesses"
+    puts "GAME OVER".red
+    puts "Out of guesses".red
     puts "Secret word was: #{@secret}"
   end
 
@@ -327,11 +377,12 @@ class Game
     end
     }
 
-    #   if secret_arr.none? {|i| i == guess}
-    # else
-      if !success 
+
+    if !success 
+      if @missed.none? {|missed| missed == guess}
         @turns -= 1
         @missed << guess
+      end
       
     end
     
@@ -350,10 +401,18 @@ class Game
 
   def loadgame
     file = File.read('hangman.json')
-    obj = JSON.parse file
-    obj.keys.each { |key|
-      instance_variable_set(key, obj[key])
-    }
+    if file == ""
+      puts "There is nothing to load.".red
+      puts "Try to save a game first!".red
+    else
+      obj = JSON.parse file
+      obj.keys.each { |key|
+        instance_variable_set(key, obj[key])
+      }
+      puts
+      puts "Game Loaded".green
+      puts
+    end
   end
 
   def deletegame
